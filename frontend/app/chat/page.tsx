@@ -81,6 +81,8 @@ export default function ChatPage() {
     useMemory,
     setUseRAG,
     setUseMemory,
+    useLocalEmbedding,
+    useReranker,
   } = useSettingsStore();
   const apiKey = getEffectiveApiKey();
   const currentModel = SUPPORTED_MODELS.find((m) => m.id === model);
@@ -292,6 +294,9 @@ export default function ChatPage() {
                 ...requestBody,
                 use_rag: useRAG,
                 use_memory: useMemory,
+                provider: currentModel?.provider ?? "openai",
+                useLocalEmbedding: useLocalEmbedding,
+                useReranker: useReranker,
               }
             : requestBody,
         ),
@@ -321,35 +326,66 @@ export default function ChatPage() {
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+      const META_PREFIX = "<<META>>";
+      let lineBuffer = "";
+
+      const patchAssistant = () =>
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantMessage.id
+              ? {
+                  ...msg,
+                  content: assistantMessage.content,
+                  sources: assistantMessage.sources,
+                  verification: assistantMessage.verification,
+                }
+              : msg,
+          ),
+        );
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value);
+        if (done) {
+          if (lineBuffer && !lineBuffer.startsWith(META_PREFIX)) {
+            assistantMessage.content += lineBuffer;
+          }
+          patchAssistant();
+          break;
+        }
 
-        // 检测后端流式传递的错误信息
-        if (
-          chunk.startsWith("[ERROR]") ||
-          (assistantMessage.content === "" && chunk.includes("[ERROR]"))
-        ) {
-          const errText = (assistantMessage.content + chunk)
-            .replace("[ERROR]", "")
-            .trim();
-          // 移除空的 assistant 消息
+        lineBuffer += decoder.decode(value);
+        const lines = lineBuffer.split("\n");
+        lineBuffer = lines.pop() ?? "";
+
+        let textDelta = "";
+        for (const line of lines) {
+          if (line.startsWith(META_PREFIX)) {
+            try {
+              const payload = JSON.parse(line.slice(META_PREFIX.length));
+              if (payload.sources) assistantMessage.sources = payload.sources;
+              if (payload.verification)
+                assistantMessage.verification = payload.verification;
+            } catch {
+              // 忽略无法解析的元信息帧
+            }
+          } else {
+            textDelta += line + "\n";
+          }
+        }
+
+        const pending = textDelta + lineBuffer;
+        if (pending.includes("[ERROR]")) {
+          const errText = pending.replace("[ERROR]", "").trim();
           setMessages((prev) =>
             prev.filter((msg) => msg.id !== assistantMessage.id),
           );
           throw new Error(errText || "LLM 调用失败");
         }
 
-        assistantMessage.content += chunk;
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === assistantMessage.id
-              ? { ...msg, content: assistantMessage.content }
-              : msg,
-          ),
-        );
+        if (textDelta) {
+          assistantMessage.content += textDelta;
+          patchAssistant();
+        }
       }
     } catch (error) {
       console.error("Chat error:", error);
@@ -708,6 +744,67 @@ export default function ChatPage() {
                         {message.content}
                       </p>
                     </div>
+
+                    {/* RAG 来源与校验 - Only for assistant messages */}
+                    {message.role === "assistant" &&
+                      (message.sources?.length || message.verification) && (
+                        <div className="mt-2 space-y-2 text-left">
+                          {message.verification && (
+                            <div>
+                              <span
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                                  message.verification.has_hallucination ||
+                                  message.verification.accuracy === "low"
+                                    ? "bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400"
+                                    : message.verification.accuracy === "medium"
+                                      ? "bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400"
+                                      : "bg-green-50 text-green-600 dark:bg-green-950/30 dark:text-green-400"
+                                }`}
+                              >
+                                {message.verification.has_hallucination ||
+                                message.verification.accuracy === "low"
+                                  ? "可能存在幻觉"
+                                  : message.verification.accuracy === "medium"
+                                    ? "可信度：存疑"
+                                    : "可信度：高"}
+                              </span>
+                              {message.verification.issues?.length > 0 && (
+                                <ul className="mt-1 text-xs text-amber-600 dark:text-amber-400 list-disc pl-4">
+                                  {message.verification.issues.map(
+                                    (issue, i) => (
+                                      <li key={i}>{issue}</li>
+                                    ),
+                                  )}
+                                </ul>
+                              )}
+                            </div>
+                          )}
+                          {message.sources && message.sources.length > 0 && (
+                            <div className="space-y-1.5">
+                              <p className="text-xs text-gray-400">参考来源</p>
+                              {message.sources.map((source, i) => (
+                                <a
+                                  key={source.id}
+                                  href={`${API_BASE_URL}/api/documents/${source.document_id}/file`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="block px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                                >
+                                  <div className="flex items-center gap-2 text-xs font-medium text-gray-700 dark:text-gray-200">
+                                    <BookOpen className="h-3 w-3 shrink-0 text-gray-400" />
+                                    <span className="truncate">
+                                      [{i + 1}] {source.title}
+                                    </span>
+                                  </div>
+                                  <p className="mt-1 text-xs text-gray-400 line-clamp-2 leading-relaxed">
+                                    {source.snippet}
+                                  </p>
+                                </a>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                     {/* Message Actions - Only for assistant messages */}
                     {message.role === "assistant" && (

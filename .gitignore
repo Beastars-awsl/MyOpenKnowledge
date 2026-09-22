@@ -46,3 +46,5 @@ frontend/.next/
 frontend/node_modules/
 backend/**/__pycache__/
 backend/**/*.pyc
+backend/venv*/
+pip-install*.log

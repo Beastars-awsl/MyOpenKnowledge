@@ -134,7 +134,7 @@ export default function KnowledgePage() {
         if (response.ok) {
           const data = await response.json();
           const hasEmbeddingModel = data.models?.some((m: { name: string }) =>
-            m.name.includes("nomic-embed-text"),
+            m.name.includes("bge-m3") || m.name.includes("nomic-embed-text"),
           );
           setLocalOllamaStatus(hasEmbeddingModel);
         } else {

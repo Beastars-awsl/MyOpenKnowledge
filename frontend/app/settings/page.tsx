@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Key, Bot, ArrowLeft, Check, ChevronDown, Eye, EyeOff, Globe } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 import Link from 'next/link';
 
 export default function SettingsPage() {
@@ -24,6 +25,8 @@ export default function SettingsPage() {
     selectedProvider,
     setSelectedProvider,
     getEffectiveApiKey,
+    useReranker,
+    setUseReranker,
   } = useSettingsStore();
 
   const [activeTab, setActiveTab] = useState<'models' | 'providers'>('models');
@@ -190,6 +193,25 @@ export default function SettingsPage() {
                   <p className="text-sm text-muted-foreground">
                     配置各厂商的 API 密钥（仅存储在本地）
                   </p>
+                </div>
+              </div>
+
+              <div className="border border-border rounded-xl p-4 mb-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium">本地 Reranker 精排</p>
+                    <p className="text-sm text-muted-foreground">
+                      使用 bge-reranker-v2-m3 对检索结果精排；模型缺失时自动降级为 RRF 融合
+                    </p>
+                  </div>
+                  <Switch checked={useReranker} onCheckedChange={setUseReranker} />
+                </div>
+                <div className="text-sm text-muted-foreground border-t border-border pt-3">
+                  <p className="font-medium text-foreground mb-1">本地 Ollama 模式（默认）</p>
+                  <p>首次使用请先拉取模型：</p>
+                  <code className="block mt-1 px-2 py-1 rounded bg-muted text-xs">
+                    ollama pull qwen2.5:7b &amp;&amp; ollama pull bge-m3
+                  </code>
                 </div>
               </div>
 

@@ -11,6 +11,13 @@ export interface ModelConfig {
 
 export const SUPPORTED_MODELS: ModelConfig[] = [
   {
+    id: "qwen2.5:7b",
+    name: "Qwen2.5 7B (本地 Ollama)",
+    provider: "ollama",
+    description: "本地离线运行，隐私优先，需先 ollama pull qwen2.5:7b",
+    contextWindow: 32768,
+  },
+  {
     id: "gpt-5.4",
     name: "GPT-5.4",
     provider: "openai",
@@ -301,6 +308,12 @@ export const PROVIDERS = [
     keyName: "MISTRAL_API_KEY",
     baseUrlPlaceholder: "https://api.mistral.ai",
   },
+  {
+    id: "ollama",
+    name: "Ollama 本地",
+    keyName: "",
+    baseUrlPlaceholder: "http://localhost:11434",
+  },
 ];
 
 interface ApiKeys {
@@ -321,6 +334,7 @@ interface SettingsStore {
   useRAG: boolean;
   useMemory: boolean;
   useLocalEmbedding: boolean;
+  useReranker: boolean;
 
   // Actions
   setOpenaiApiKey: (key: string) => void;
@@ -331,6 +345,7 @@ interface SettingsStore {
   setUseRAG: (value: boolean) => void;
   setUseMemory: (value: boolean) => void;
   setUseLocalEmbedding: (value: boolean) => void;
+  setUseReranker: (value: boolean) => void;
   getEffectiveApiKey: () => string;
 }
 
@@ -339,17 +354,18 @@ export const useSettingsStore = create<SettingsStore>()(
     (set, get) => ({
       // Legacy
       openaiApiKey: "",
-      model: "gpt-5-mini",
+      model: "qwen2.5:7b",
 
       // New
       apiKeys: {},
       baseUrls: {},
-      selectedProvider: "openai",
+      selectedProvider: "ollama",
 
       // Feature toggles
-      useRAG: false,
+      useRAG: true,
       useMemory: false,
-      useLocalEmbedding: false,
+      useLocalEmbedding: true,
+      useReranker: true,
 
       setOpenaiApiKey: (key) => set({ openaiApiKey: key }),
       setModel: (model) => set({ model }),
@@ -365,6 +381,7 @@ export const useSettingsStore = create<SettingsStore>()(
       setUseRAG: (value) => set({ useRAG: value }),
       setUseMemory: (value) => set({ useMemory: value }),
       setUseLocalEmbedding: (value) => set({ useLocalEmbedding: value }),
+      setUseReranker: (value) => set({ useReranker: value }),
       getEffectiveApiKey: () => {
         const state = get();
         const provider = state.selectedProvider;
@@ -372,6 +389,7 @@ export const useSettingsStore = create<SettingsStore>()(
         const modelProvider = model?.provider || provider;
 
         // Try to get key for the model's provider
+        if (modelProvider === "ollama") return "";
         return (
           state.apiKeys[modelProvider] ||
           (modelProvider === "openai" ? state.openaiApiKey : "")

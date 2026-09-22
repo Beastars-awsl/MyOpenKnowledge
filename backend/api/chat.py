@@ -5,6 +5,7 @@ import traceback
 
 from models.schemas import ChatRequest, RAGChatRequest
 from services.llm_service import llm_service
+from services.llm_service import is_meta_frame
 from services.conversation_service import conversation_service
 from services.memory_service import memory_service
 from services.tools_service import tools_service
@@ -165,9 +166,13 @@ async def chat_with_rag(
                 use_tools=request.use_tools,
                 base_url=request.baseUrl,
                 session=session,
-                history=optimized_context
+                history=optimized_context,
+                provider=request.provider,
+                use_local_embedding=request.useLocalEmbedding,
+                use_reranker=request.useReranker
             ):
-                assistant_content += chunk
+                if not is_meta_frame(chunk):
+                    assistant_content += chunk
                 yield chunk
 
             # 保存助手回复
@@ -200,7 +205,7 @@ async def chat_with_rag(
                         _extract_memories_background(
                             conversation_id=request.conversationId,
                             api_key=request.apiKey,
-                            provider=request.model.split("-")[0] if "-" in request.model else "openai",
+                            provider=request.provider,
                             base_url=request.baseUrl
                         )
                     )

@@ -1,7 +1,10 @@
 import os
 import asyncio
 import tempfile
+import re
 from typing import List
+
+from core import config
 from pypdf import PdfReader
 from docx import Document as DocxDocument
 import uuid
@@ -227,7 +230,7 @@ class DocumentService:
 
                     if line_texts:
                         text_parts.append(
-                            f"\n--- 第 {i + 1} 页 ---\n{'\n'.join(line_texts)}\n"
+                            f"\n--- 第 {i + 1} 页 ---\n{chr(10).join(line_texts)}\n"
                         )
                 finally:
                     if temp_path and os.path.exists(temp_path):
@@ -279,7 +282,7 @@ class DocumentService:
 
                     if line_texts:
                         text_parts.append(
-                            f"\n--- 第 {i + 1} 页 ---\n{'\n'.join(line_texts)}\n"
+                            f"\n--- 第 {i + 1} 页 ---\n{chr(10).join(line_texts)}\n"
                         )
                 finally:
                     if temp_path and os.path.exists(temp_path):
@@ -318,20 +321,86 @@ class DocumentService:
             return f.read()
 
     def chunk_text(
-        self, text: str, chunk_size: int = 1000, overlap: int = 200
+        self,
+        text: str,
+        chunk_size: int = config.CHUNK_SIZE,
+        overlap: int = config.CHUNK_OVERLAP,
     ) -> List[str]:
-        """Split text into chunks with overlap"""
-        chunks = []
+        """结构感知分块：按 markdown 标题/段落聚合，超长段落用重叠滑窗。"""
+        sections = self._split_sections(text)
+        chunks: List[str] = []
+
+        for heading, blocks in sections:
+            current = ""
+            for block in blocks:
+                piece = block if not (heading and not current) else f"{heading}\n{block}"
+                if len(piece) > chunk_size:
+                    if current.strip():
+                        chunks.append(current.strip())
+                        current = ""
+                    chunks.extend(
+                        self._sliding_windows(block, chunk_size, overlap, heading)
+                    )
+                elif len(current) + len(piece) + (1 if current else 0) <= chunk_size:
+                    current = f"{current}\n{piece}" if current else piece
+                else:
+                    if current.strip():
+                        chunks.append(current.strip())
+                    current = f"{heading}\n{block}" if heading else block
+            if current.strip():
+                chunks.append(current.strip())
+
+        return [c for c in chunks if c]
+
+    @staticmethod
+    def _split_sections(text: str):
+        """返回 [(heading, [paragraph, ...]), ...]，无标题时整篇作为一节。"""
+        lines = text.splitlines()
+        sections = []
+        heading = ""
+        buffer: List[str] = []
+
+        def flush():
+            content = "\n".join(buffer).strip()
+            paragraphs = [p.strip() for p in content.split("\n\n") if p.strip()]
+            if paragraphs:
+                sections.append((heading, paragraphs))
+
+        has_heading = False
+        for line in lines:
+            if re.match(r"^#{1,6}\s+\S", line):
+                has_heading = True
+                flush()
+                buffer = []
+                heading = line.strip()
+            else:
+                buffer.append(line)
+        flush()
+
+        if not has_heading:
+            content = text.strip()
+            paragraphs = [p.strip() for p in content.split("\n\n") if p.strip()]
+            if paragraphs and all(h == "" for h, _ in sections):
+                return [("", paragraphs)]
+        return sections
+
+    @staticmethod
+    def _sliding_windows(
+        text: str, size: int, overlap: int, heading: str = ""
+    ) -> List[str]:
+        windows = []
+        step = max(size - overlap, 1)
         start = 0
-        text_len = len(text)
-
-        while start < text_len:
-            end = min(start + chunk_size, text_len)
-            chunk = text[start:end]
-            chunks.append(chunk)
-            start += chunk_size - overlap
-
-        return chunks
+        first = True
+        while start < len(text):
+            window = text[start : start + size]
+            if first and heading:
+                windows.append(f"{heading}\n{window}".strip())
+                first = False
+            else:
+                windows.append(window.strip())
+            start += step
+        return windows
 
 
 document_service = DocumentService()

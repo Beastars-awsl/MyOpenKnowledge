@@ -1,5 +1,6 @@
-import litellm
 from typing import List, Optional
+
+from core import config
 
 class EmbeddingService:
     # Provider base URLs for generic OpenAI clients
@@ -20,7 +21,7 @@ class EmbeddingService:
 
     # Local Ollama settings
     OLLAMA_BASE_URL = "http://localhost:11434"
-    OLLAMA_EMBEDDING_MODEL = "nomic-embed-text"
+    OLLAMA_EMBEDDING_MODEL = config.OLLAMA_EMBEDDING_MODEL
 
     async def get_embeddings(
         self,

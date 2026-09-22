@@ -47,6 +47,9 @@ class RAGChatRequest(BaseModel):
     apiKey: str
     model: str = "gpt-5-mini"
     baseUrl: Optional[str] = None
+    provider: str = "openai"
+    useLocalEmbedding: bool = False
+    useReranker: bool = True
 
 
 # Memory schemas

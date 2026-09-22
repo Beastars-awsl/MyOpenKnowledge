@@ -103,17 +103,33 @@ cd OpenKnowledge
 docker-compose up -d
 ```
 
-3. **安装并启动后端**
+3. **准备本地模型（默认本地优先）**
+
+```bash
+ollama pull qwen2.5:7b   # 对话模型
+ollama pull bge-m3       # 嵌入模型（1024 维）
+```
+
+RAG 精排首次运行会自动下载 `bge-reranker-v2-m3`（约 600MB）；如不希望使用，可在「设置」中关闭本地 Reranker。
+不使用本地模型时，也可以在「设置」中选择云端厂商并填入 API Key。
+
+> 切换嵌入后端（如从本地 bge-m3 换成云端 embedding）后维度会不一致，需要重建索引：
+> `cd backend && python scripts/reindex.py --local`（或 `--provider openai --api-key sk-xxx`）
+
+4. **安装并启动后端**
 
 ```bash
 cd backend
 python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+Windows: .\venv311\Scripts\activate
 pip install -r requirements.txt
 python main.py
+#直接启动命令 
+#cd backend   
+#.\venv311\Scripts\python.exe main.py
 ```
 
-4. **安装并启动前端**
+5. **安装并启动前端**
 
 ```bash
 cd frontend
@@ -121,7 +137,7 @@ npm install
 npm run dev
 ```
 
-5. **访问应用**
+6. **访问应用**
 
 - 前端：http://localhost:3000
 - 后端 API：http://localhost:8000
@@ -136,13 +152,17 @@ OpenKnowledge/
 │   ├── app/               # App Router 页面
 │   ├── components/        # React 组件
 │   ├── lib/               # 工具函数
-│   ├── hooks/             # 自定义 Hooks
-│   └── stores/            # Zustand 状态管理
+│   ├── stores/            # Zustand 状态管理
+│   ├── types/             # TypeScript 类型定义
+│   └── public/            # 静态资源
 ├── backend/                # FastAPI 后端
 │   ├── api/               # API 路由
 │   ├── services/          # 业务逻辑
 │   ├── models/            # 数据模型
-│   └── core/              # 配置和数据库连接
+│   ├── core/              # 配置和数据库连接
+│   ├── scripts/           # 运维脚本（如重建索引 reindex.py）
+│   ├── tests/             # 后端测试
+│   └── uploads/           # 上传文件的运行时存储目录
 ├── screenshots/           # 项目截图
 ├── docker-compose.yml      # Docker 配置文件
 └── README.md              # 项目文档
@@ -410,6 +430,52 @@ sequenceDiagram
     end
 ```
 
+### RAG 问答调用时序图
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant API as chat API (/chat/rag)
+    participant LLM_SVC as llm_service
+    participant QS as query_service
+    participant RS as retrieval_service
+    participant ES as embedding_service
+    participant DB as PostgreSQL + pgvector
+    participant RR as Reranker (bge-reranker)
+    participant LLM as LLM Provider
+
+    C->>API: POST /chat/rag (message, use_rag, provider...)
+    API->>API: 记录用户消息 / 读取历史上下文
+    API->>LLM_SVC: stream_chat(use_rag, use_reranker...)
+
+    LLM_SVC->>QS: rewrite_query(message)
+    QS-->>LLM_SVC: 改写后的多个查询（失败静默降级）
+
+    LLM_SVC->>RS: hybrid_search(queries, embed_fn)
+    loop 每个查询
+        RS->>ES: 生成查询向量 (bge-m3 / 云端)
+        ES-->>RS: query embedding
+        RS->>DB: 向量余弦召回 + BM25 关键词召回
+        DB-->>RS: 候选文档片段
+    end
+    RS->>RS: RRF 融合两路召回结果
+
+    opt 开启本地 Reranker
+        RS->>RR: score(query, passages)
+        RR-->>RS: 精排相关性分数
+    end
+    RS-->>LLM_SVC: Top-K 相关片段
+
+    LLM_SVC->>LLM_SVC: 拼接【资料】上下文与来源元信息
+    LLM_SVC-->>C: 先发送 sources 引用元信息（meta 帧）
+    LLM_SVC->>LLM: 流式对话调用 (LiteLLM)
+    LLM-->>C: SSE 流式返回答案
+    LLM_SVC->>QS: verify_answer(问题, 答案, 来源片段)
+    QS-->>LLM_SVC: 依据校验结果（失败静默降级）
+    LLM_SVC-->>C: 返回 verification 元信息（meta 帧）
+    API->>DB: 持久化助手回复（并异步生成摘要/记忆）
+```
 ### 1. LLM Gateway
 
 统一的 LLM API 封装层，支持多提供商切换（OpenAI/Claude/Qwen/Ollama）。
