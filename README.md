@@ -25,6 +25,7 @@
 - **📚 知识库管理** - 支持多种文档格式（PDF、Word、Excel、图片、视频等）的导入和管理
 - **🔍 语义搜索** - 使用向量数据库实现文档内容的语义检索
 - **🧠 学习记忆** - 自动记录学习进度，支持间隔重复和遗忘曲线复习
+- **📝 刷题助手** - 从知识库、粘贴资料或自由主题生成闪记卡、单选题和简答题；使用 FSRS 安排复习，支持错题重练、变式题和按需 AI 复盘
 - **🌐 多 LLM 支持** - 兼容 OpenAI、Claude、Qwen、Ollama 等多种大语言模型
 - **🔒 本地部署** - 数据完全存储在本地，保护隐私安全
 
@@ -521,6 +522,19 @@ cd backend
 source venv/bin/activate
 python main.py       # 开发服务器
 ```
+
+### 验证
+
+```bash
+cd backend
+pytest -q
+
+cd ../frontend
+npm run lint
+npm run build
+```
+
+刷题助手的后端测试会使用 `fsrs==6.3.2`。其中数据库集成测试需要将 `STUDY_TEST_DATABASE_URL` 指向名称以 `study_test_` 开头的隔离 PostgreSQL 数据库；测试会拒绝操作其他数据库。
 
 ---
 

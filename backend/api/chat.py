@@ -92,7 +92,8 @@ async def chat(
                 use_memory=False,
                 base_url=request.baseUrl,
                 session=session,
-                history=optimized_context
+                history=optimized_context,
+                provider=request.provider
             ):
                 assistant_content += chunk
                 yield chunk

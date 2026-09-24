@@ -864,6 +864,7 @@ export default function KnowledgePage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-1">
+                          {canPreview && <Link href={`/study?document=${doc.id}`} className="rounded-lg px-3 py-2 text-xs text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950">生成练习</Link>}
                           <button
                             onClick={(e) => {
                               e.stopPropagation();

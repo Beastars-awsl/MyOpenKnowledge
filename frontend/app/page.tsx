@@ -26,6 +26,9 @@ export default function Home() {
         </div>
 
         <nav className="flex-1 px-2 space-y-0.5">
+          <Link href="/study" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-sidebar-accent hover:text-foreground transition-colors">
+            <BookOpen className="h-4 w-4" />刷题助手
+          </Link>
           <Link
             href="/knowledge"
             className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-sidebar-accent hover:text-foreground transition-colors cursor-pointer"
@@ -59,7 +62,14 @@ export default function Home() {
           </p>
 
           {/* Feature Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-12">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-12">
+            <Link href="/study" className="group">
+              <div className="p-6 rounded-xl border border-emerald-700/30 hover:border-emerald-700 hover:shadow-lg transition-all text-left">
+                <div className="w-10 h-10 rounded-lg bg-emerald-700/10 text-emerald-700 flex items-center justify-center mb-4"><BookOpen className="h-5 w-5" /></div>
+                <h3 className="font-medium mb-1">刷题助手</h3>
+                <p className="text-sm text-muted-foreground">AI 出题、间隔复习与针对性练习</p>
+              </div>
+            </Link>
             <Link href="/chat" className="group">
               <div className="p-6 rounded-xl border border-border hover:border-primary/50 hover:shadow-lg transition-all text-left">
                 <div className="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center mb-4">

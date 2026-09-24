@@ -1,0 +1,122 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
+// Run against backend/tests/study_preview.py and a local frontend, using an available Playwright installation.
+const { chromium } = require("playwright");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+
+(async () => {
+  const browser = await chromium.launch({ channel: process.env.STUDY_BROWSER_CHANNEL || "msedge", headless: true });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  const page = await context.newPage();
+  const errors = [];
+  page.on("pageerror", error => errors.push(error.message));
+  const output = path.join(os.tmpdir(), "openknowledge-study");
+  fs.mkdirSync(output, { recursive: true });
+  await context.tracing.start({ screenshots: true, snapshots: true });
+  const button = name => page.getByRole("button", { name, exact: true });
+  const visible = text => page.getByText(text, { exact: true }).waitFor({ state: "visible", timeout: 20000 });
+  const idle = () => page.getByText("正在处理，请稍候…", { exact: true }).waitFor({ state: "hidden", timeout: 20000 });
+  const title = `学习方法 ${Date.now()}`;
+  try {
+    await page.goto("http://localhost:3000/study");
+    await visible("温故，才能知新。");
+    await button("卡组管理").click();
+    await page.getByLabel("新卡组名称").fill(title);
+    await button("创建卡组").click();
+    await visible("卡组已创建，可前往生成题目。");
+    await button("生成题目").first().click();
+    await page.getByLabel("内容来源", { exact: true }).selectOption("text");
+    await page.getByLabel("学习资料", { exact: true }).fill("间隔复习是在一段时间后再次主动回忆。主动回忆比单纯重读更有助于检查知识缺口。");
+    await page.getByLabel("生成数量", { exact: true }).fill("3");
+    await button("生成预览").click();
+    await button("保存所选 3 题").waitFor();
+    await page.locator("summary").filter({ hasText: "用一句话解释间隔复习。" }).click();
+    await page.getByLabel("题干", { exact: true }).first().fill("用自己的话解释间隔复习。");
+    await page.getByLabel("保存到卡组", { exact: true }).selectOption({ label: title });
+    await button("保存所选 3 题").click();
+    await visible("题目已保存，可以开始练习。");
+    await button("今日学习").click();
+    await button("开始复习").click();
+    await button("翻开答案").waitFor();
+    const sessionUrl = page.url();
+    await button("翻开答案").click();
+    await page.getByRole("button", { name: /^忘记/ }).waitFor();
+    await page.reload();
+    await page.getByRole("button", { name: /^忘记/ }).waitFor();
+    assert.equal(page.url(), sessionUrl);
+    await page.getByRole("button", { name: /^记得/ }).click();
+    await page.getByText("专注这一题", { exact: true }).waitFor();
+    await page.getByRole("radio", { name: /连续重读/ }).check();
+    await button("提交答案").click();
+    await visible("回答错误，请对照解析复习");
+    await page.getByRole("button", { name: /^忘记/ }).click();
+    await page.getByLabel("你的回答", { exact: true }).fill("模拟失败：再次回忆能帮助记忆。");
+    await button("提交答案").click();
+    await visible("AI 点评暂不可用，请对照参考答案手动自评");
+    await page.getByRole("button", { name: /^困难/ }).click();
+    await visible("本轮已结束");
+    await button("生成本轮复盘").click();
+    await visible("本轮练习提示：主动回忆与单纯重读需要区分。建议合上资料，先用自己的话解释概念，再检查遗漏。到期时按页面安排继续复习。");
+    await page.screenshot({ path: path.join(output, "study-recap.png"), fullPage: true });
+    await page.reload();
+    await button("已保存").waitFor();
+    await button("生成变式").first().click();
+    await visible("围绕「主动回忆」举一反三");
+    await button("生成预览").click();
+    await button("保存所选 3 题").waitFor();
+    await button("保存所选 3 题").click();
+    await visible("题目已保存，可以开始练习。");
+    await button("今日学习").click();
+    await button("错题重练").click();
+    await page.getByText("专注这一题", { exact: true }).waitFor();
+    await button("退出，稍后继续").click();
+    await button("开始复习").waitFor();
+
+    // Knowledge-library entry, with the fixture document selected from the link.
+    await page.goto("http://localhost:3000/study?document=41000000-0000-4000-8000-000000000001");
+    await page.getByLabel("选择文档", { exact: true }).waitFor();
+    assert.equal(await page.getByLabel("选择文档", { exact: true }).inputValue(), "41000000-0000-4000-8000-000000000001");
+    await button("生成预览").click();
+    await button("保存所选 3 题").waitFor();
+    assert.match(await page.locator("main").innerText(), /第 1–1 块/);
+    await page.getByLabel("内容来源", { exact: true }).selectOption("topic");
+    await page.getByLabel("学习主题", { exact: true }).fill("主动回忆的使用方法");
+    await button("重新生成预览").click();
+    await idle();
+    assert.match(await page.locator("main").innerText(), /模型生成，未经资料核验/);
+    await page.getByLabel("保存到卡组", { exact: true }).selectOption({ label: title });
+    await button("保存所选 3 题").click();
+    await visible("题目已保存，可以开始练习。");
+
+    await button("编辑").first().click();
+    await page.getByLabel("题干", { exact: true }).fill("编辑后：解释间隔复习。");
+    await button("保存修改").click();
+    await visible("编辑后：解释间隔复习。");
+    await button("归档").first().click();
+    await button("恢复").first().waitFor();
+    await button("恢复").first().click();
+    await idle();
+    await button("今日学习").click();
+    await page.screenshot({ path: path.join(output, "study-desktop.png"), fullPage: true });
+    await button("学习复盘").click();
+    await page.getByLabel("统计时间范围").selectOption("30");
+    await visible("每日练习次数");
+    await page.screenshot({ path: path.join(output, "study-progress.png"), fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await button("今日学习").click();
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, "Mobile page overflows horizontally");
+    await page.screenshot({ path: path.join(output, "study-mobile.png"), fullPage: true });
+    assert.deepEqual(errors, [], "Browser runtime errors");
+    console.log("PASS: text/document/topic generation, edit/save, three question types, restore, grading fallback, recap cache, variants, mistakes, archive, statistics, mobile layout.");
+    console.log(`Screenshots: ${output}`);
+  } catch (error) {
+    await page.screenshot({ path: path.join(output, "study-failure.png"), fullPage: true });
+    console.error(await page.locator("body").innerText());
+    throw error;
+  } finally {
+    await context.tracing.stop({ path: path.join(output, "study-trace.zip") });
+    await browser.close();
+  }
+})().catch(error => { console.error(error); process.exitCode = 1; });

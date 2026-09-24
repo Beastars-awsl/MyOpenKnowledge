@@ -3,16 +3,18 @@
 import { useState } from 'react';
 import {
   useSettingsStore,
-  SUPPORTED_MODELS,
   PROVIDERS,
-  getModelsByProvider,
 } from '@/stores/settings';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Key, Bot, ArrowLeft, Check, ChevronDown, Eye, EyeOff, Globe } from 'lucide-react';
+import { Key, Bot, ArrowLeft, Check, ChevronDown, Eye, EyeOff, Globe, RefreshCw, Cpu } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import Link from 'next/link';
+import {
+  useOllamaModels,
+  mergeWithStaticModels,
+} from '@/lib/use-ollama-models';
 
 export default function SettingsPage() {
   const {
@@ -33,11 +35,19 @@ export default function SettingsPage() {
   const [showKey, setShowKey] = useState<Record<string, boolean>>({});
   const [expandedProvider, setExpandedProvider] = useState<string | null>(selectedProvider);
 
+  const {
+    available: ollamaAvailable,
+    detected: ollamaModels,
+    loading: ollamaLoading,
+    refresh: refreshOllama,
+  } = useOllamaModels();
+  const allModels = mergeWithStaticModels(ollamaModels);
+
   const currentProvider = PROVIDERS.find((p) => p.id === selectedProvider);
 
   const handleModelSelect = (modelId: string) => {
     setModel(modelId);
-    const modelConfig = SUPPORTED_MODELS.find((m) => m.id === modelId);
+    const modelConfig = allModels.find((m) => m.id === modelId);
     if (modelConfig) {
       setSelectedProvider(modelConfig.provider);
     }
@@ -142,8 +152,8 @@ export default function SettingsPage() {
               {/* Model list */}
               <div className="space-y-3">
                 {(selectedProvider
-                  ? getModelsByProvider(selectedProvider)
-                  : SUPPORTED_MODELS
+                  ? allModels.filter((m) => m.provider === selectedProvider)
+                  : allModels
                 ).map((m) => (
                   <button
                     key={m.id}
@@ -207,11 +217,44 @@ export default function SettingsPage() {
                   <Switch checked={useReranker} onCheckedChange={setUseReranker} />
                 </div>
                 <div className="text-sm text-muted-foreground border-t border-border pt-3">
-                  <p className="font-medium text-foreground mb-1">本地 Ollama 模式（默认）</p>
-                  <p>首次使用请先拉取模型：</p>
-                  <code className="block mt-1 px-2 py-1 rounded bg-muted text-xs">
-                    ollama pull qwen2.5:7b &amp;&amp; ollama pull bge-m3
-                  </code>
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="font-medium text-foreground">本地 Ollama 模式（默认）</p>
+                    <button
+                      onClick={refreshOllama}
+                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <RefreshCw className={`h-3 w-3 ${ollamaLoading ? 'animate-spin' : ''}`} />
+                      重新检测
+                    </button>
+                  </div>
+                  {ollamaLoading ? (
+                    <p>正在检测本地 Ollama…</p>
+                  ) : ollamaAvailable ? (
+                    <div className="mt-2 space-y-1.5">
+                      <p className="text-xs">
+                        检测到 {ollamaModels.length} 个已安装模型：
+                      </p>
+                      {ollamaModels.map((m) => (
+                        <div
+                          key={m.id}
+                          className="flex items-center gap-2 px-2 py-1.5 rounded bg-muted text-xs"
+                        >
+                          <Cpu className="h-3 w-3 shrink-0" />
+                          <span className="font-medium text-foreground">{m.id}</span>
+                          <span className="shrink-0 px-1.5 py-0.5 rounded bg-background text-muted-foreground">
+                            {m.embeddingOnly ? '嵌入模型' : '对话模型'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <>
+                      <p>未检测到运行中的 Ollama，请先启动 Ollama 并拉取模型：</p>
+                      <code className="block mt-1 px-2 py-1 rounded bg-muted text-xs">
+                        ollama pull qwen2.5:7b &amp;&amp; ollama pull bge-m3
+                      </code>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -320,7 +363,7 @@ export default function SettingsPage() {
                 <div className="text-sm space-y-1">
                   <p>
                     <span className="text-muted-foreground">模型:</span>{' '}
-                    {SUPPORTED_MODELS.find((m) => m.id === model)?.name || model}
+                    {allModels.find((m) => m.id === model)?.name || model}
                   </p>
                   <p>
                     <span className="text-muted-foreground">厂商:</span>{' '}
@@ -328,7 +371,9 @@ export default function SettingsPage() {
                   </p>
                   <p>
                     <span className="text-muted-foreground">API 状态:</span>{' '}
-                    {getEffectiveApiKey() ? (
+                    {selectedProvider === 'ollama' ? (
+                      <span className="text-muted-foreground">无需配置 · 本地运行</span>
+                    ) : getEffectiveApiKey() ? (
                       <span className="text-emerald-600">已配置</span>
                     ) : (
                       <span className="text-red-500">未配置</span>

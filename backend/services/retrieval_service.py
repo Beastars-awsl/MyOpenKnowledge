@@ -4,6 +4,7 @@ BM25 公式移植自 ChainMind，分词器替换为 jieba 以支持中文。
 """
 import asyncio
 import math
+import os
 import re
 from typing import Awaitable, Callable, Dict, List, Optional
 
@@ -85,7 +86,26 @@ class Reranker:
     def _load(self):
         from sentence_transformers import CrossEncoder
 
+        # 缩短探测超时与重试：网络不通时快速失败并降级，避免长时间阻塞整条问答
+        os.environ.setdefault("HF_HUB_ETAG_TIMEOUT", "5")
+        try:
+            from huggingface_hub import constants as _hf_constants
+
+            _hf_constants.HF_HUB_DOWNLOAD_TIMEOUT = 30
+        except Exception:
+            pass
         return CrossEncoder(config.RERANKER_MODEL)
+
+    async def preload(self):
+        """启动时后台预加载（预下载权重），不阻塞问答；失败静默。"""
+        if self._model is not None or self.disabled:
+            return
+        try:
+            self._model = await asyncio.to_thread(self._load)
+            print("[Reranker] bge-reranker-v2-m3 预加载完成")
+        except Exception as e:
+            # 下载失败不永久禁用：可能只是临时网络问题，问答时还会再尝试
+            print(f"[Reranker] 预加载失败（问答将降级为 RRF）：{type(e).__name__}: {e}")
 
     async def score(self, query: str, passages: List[str]) -> Optional[List[float]]:
         if self.disabled or not passages:

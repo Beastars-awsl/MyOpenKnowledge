@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect } from "react";
 import {
   useSettingsStore,
-  SUPPORTED_MODELS,
   PROVIDERS,
 } from "@/stores/settings";
 import { Message } from "@/types";
@@ -37,6 +36,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { API_BASE_URL } from "@/lib/api";
+import {
+  useOllamaModels,
+  mergeWithStaticModels,
+} from "@/lib/use-ollama-models";
 import Link from "next/link";
 
 interface ChatSession {
@@ -85,7 +88,9 @@ export default function ChatPage() {
     useReranker,
   } = useSettingsStore();
   const apiKey = getEffectiveApiKey();
-  const currentModel = SUPPORTED_MODELS.find((m) => m.id === model);
+  const { detected: ollamaModels } = useOllamaModels();
+  const availableModels = mergeWithStaticModels(ollamaModels);
+  const currentModel = availableModels.find((m) => m.id === model);
   const currentProvider = PROVIDERS.find(
     (p) => p.id === currentModel?.provider,
   );
@@ -171,7 +176,7 @@ export default function ChatPage() {
         const data = await response.json();
         setCurrentConversationId(data.id);
         setMessages(
-          data.messages.map((m: any) => ({
+          data.messages.map((m: { id: string; role: "user" | "assistant"; content: string; created_at: string }) => ({
             id: m.id,
             role: m.role,
             content: m.content,
@@ -179,7 +184,7 @@ export default function ChatPage() {
           })),
         );
         // 设置当前模型
-        const convModel = SUPPORTED_MODELS.find((m) => m.id === data.model);
+        const convModel = availableModels.find((m) => m.id === data.model);
         if (convModel) {
           setModel(data.model);
           setSelectedProvider(convModel.provider);
@@ -224,7 +229,7 @@ export default function ChatPage() {
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
     setErrorMessage(null);
-    if (!apiKey) {
+    if (!apiKey && currentModel?.provider !== "ollama") {
       setErrorMessage(
         `请在设置中配置 ${currentProvider?.name || "当前模型"} 的 API 密钥`,
       );
@@ -280,6 +285,7 @@ export default function ChatPage() {
         conversationId,
         apiKey,
         model,
+        provider: currentModel?.provider ?? "openai",
         baseUrl: currentModel?.provider
           ? baseUrls[currentModel.provider]
           : undefined,
@@ -390,7 +396,11 @@ export default function ChatPage() {
     } catch (error) {
       console.error("Chat error:", error);
       const msg = error instanceof Error ? error.message : "发送消息失败";
-      setErrorMessage(`${msg}，请检查 API 密钥设置`);
+      setErrorMessage(
+        currentModel?.provider === "ollama"
+          ? msg
+          : `${msg}，请检查 API 密钥设置`,
+      );
     } finally {
       setIsLoading(false);
     }
@@ -498,6 +508,9 @@ export default function ChatPage() {
 
           {/* Features */}
           <div className="mt-1 space-y-0.5">
+            <Link href="/study" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all">
+              <BookOpen className="h-4 w-4" />刷题助手
+            </Link>
             <Link
               href="/knowledge"
               className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100 transition-all cursor-pointer"
@@ -633,7 +646,7 @@ export default function ChatPage() {
           <Select
             value={model}
             onValueChange={(value) => {
-              const m = SUPPORTED_MODELS.find((mod) => mod.id === value);
+              const m = availableModels.find((mod) => mod.id === value);
               if (m) {
                 setModel(m.id);
                 setSelectedProvider(m.provider);
@@ -658,7 +671,7 @@ export default function ChatPage() {
               </SelectValue>
             </SelectTrigger>
             <SelectContent className="max-h-[500px] w-[360px]">
-              {SUPPORTED_MODELS.map((m) => (
+              {availableModels.map((m) => (
                 <SelectItem
                   key={m.id}
                   value={m.id}

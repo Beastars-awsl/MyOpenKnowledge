@@ -12,9 +12,10 @@ class ChatRequest(BaseModel):
     message: str
     history: Optional[List[ChatMessage]] = None
     conversationId: Optional[str] = None
-    apiKey: str
+    apiKey: str = ""
     model: str = "gpt-5-mini"
     baseUrl: Optional[str] = None
+    provider: str = "openai"
 
 
 class DocumentResponse(BaseModel):
@@ -44,7 +45,7 @@ class RAGChatRequest(BaseModel):
     use_memory: bool = True
     use_tools: bool = False
     conversationId: Optional[str] = None
-    apiKey: str
+    apiKey: str = ""
     model: str = "gpt-5-mini"
     baseUrl: Optional[str] = None
     provider: str = "openai"

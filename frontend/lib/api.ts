@@ -8,6 +8,32 @@ export interface ChatRequest {
   model: string;
 }
 
+export interface OllamaModelInfo {
+  name: string;
+  size: number;
+  modified_at?: string | null;
+  embedding_only?: boolean;
+}
+
+export interface OllamaModelsResponse {
+  available: boolean;
+  models: OllamaModelInfo[];
+}
+
+export const ollamaApi = {
+  listModels: async (): Promise<OllamaModelsResponse> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/ollama/models`, {
+        cache: "no-store",
+      });
+      if (!response.ok) return { available: false, models: [] };
+      return response.json();
+    } catch {
+      return { available: false, models: [] };
+    }
+  },
+};
+
 export const chatApi = {
   sendMessage: async (
     data: ChatRequest,

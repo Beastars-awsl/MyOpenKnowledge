@@ -4,6 +4,15 @@ from pydantic_settings import BaseSettings
 # ponytail: CN network mirror for HF model downloads; set HF_ENDPOINT to override
 os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
 
+# Ollama/Postgres are local services; force localhost to bypass any system proxy
+# (otherwise HTTP_PROXY makes litellm/httpx fail with 502 on 127.0.0.1:11434).
+_no_proxy = [p.strip() for p in os.environ.get("NO_PROXY", "").split(",") if p.strip()]
+for _host in ("localhost", "127.0.0.1"):
+    if _host not in _no_proxy:
+        _no_proxy.append(_host)
+os.environ["NO_PROXY"] = ",".join(_no_proxy)
+os.environ["no_proxy"] = os.environ["NO_PROXY"]
+
 
 class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/knowledge_assistant"

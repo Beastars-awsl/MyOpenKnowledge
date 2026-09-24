@@ -33,8 +33,8 @@ class EmbeddingService:
     ) -> List[List[float]]:
         """Get embeddings for a list of texts using direct clients (bypassing litellm)"""
 
-        # Use local Ollama if requested
-        if use_local:
+        # 本地优先：显式开关或厂商为 ollama 时都走本地嵌入模型
+        if use_local or provider == "ollama":
             return await self._get_ollama_embeddings(
                 texts, self.OLLAMA_BASE_URL, self.OLLAMA_EMBEDDING_MODEL
             )

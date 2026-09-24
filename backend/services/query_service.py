@@ -24,8 +24,10 @@ def resolve_model(
     kwargs: Dict[str, Any] = {"timeout": 30}
 
     if provider == "ollama":
+        # 本地模型冷启动（加载数 GB 权重）较慢，给更宽裕的超时
         return f"ollama/{model}", {
             **kwargs,
+            "timeout": 180,
             "api_base": base_url or config.OLLAMA_BASE_URL,
             "api_key": "ollama",
         }
